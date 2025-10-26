@@ -1,6 +1,6 @@
 require("dotenv").config();
 const express = require("express");
-const sql = require("mssql/msnodesqlv8");
+const sql = require("mssql");
 const router = express.Router();
 const moment = require("moment-timezone");
 const bcrypt = require("bcrypt");
@@ -34,8 +34,7 @@ async function checkDatabaseConnection() {
     const result = await pool.request().query("SELECT 1 AS test");
 
     if (result.recordset.length > 0) {
-      const dbName =
-        config.connectionString.match(/Database=([^;]+)/)?.[1] || "Unknown DB";
+      const dbName = config.database || "Unknown DB";
       console.log("✅ Database connection successful!");
       console.log(`📊 Connected to: ${dbName}`);
     }
@@ -47,11 +46,14 @@ async function checkDatabaseConnection() {
     console.error("Error details:", error.message);
 
     // Mask sensitive info before logging
-    const safeConnectionString = config.connectionString.replace(
-      /Pwd=.*?;/i,
-      "Pwd=****;"
-    );
-    console.error("🔒 Connection string used:", safeConnectionString);
+    const safeConfig = {
+      server: config.server,
+      database: config.database,
+      user: config.user,
+      password: "****",
+      port: config.port
+    };
+    console.error("🔒 Connection config used:", safeConfig);
 
     if (pool) {
       try {
@@ -64,15 +66,6 @@ async function checkDatabaseConnection() {
     return false;
   }
 }
-
-// Test database connection on startup
-checkDatabaseConnection().then((success) => {
-  if (success) {
-    console.log("🚀 Database is ready for requests");
-  } else {
-    console.log("⚠️  Database connection failed - some features may not work");
-  }
-});
 
 router.get("/", async (req, res) => {
   let pool;
