@@ -1,14 +1,12 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "src"),
+    },
+  },
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks: undefined
-      }
-    }
+    outDir: "build", // changed from "dist"
   },
   // Add this for proper SPA routing
   server: {
