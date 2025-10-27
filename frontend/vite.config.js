@@ -1,7 +1,4 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { resolve } from "path";
-
+// vite.config.js
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -10,7 +7,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist",
+    outDir: "build", // changed from "dist"
   },
   server: {
     port: 5173,
