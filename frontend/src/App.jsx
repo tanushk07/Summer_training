@@ -75,7 +75,6 @@ function App() {
   }
 
   return (
-    
     <UserContext.Provider value={{ user, login, logout }}>
       <Navbar user={user} />
       <main
@@ -83,10 +82,7 @@ function App() {
       >
         <Routes>
           {/* Public routes */}
-          <Route
-            path="/login"
-            element={!user ? <Login /> : <Navigate to="/" />}
-          />
+          <Route path="/login" element={<Login />} />
           <Route
             path="/signup"
             element={!user ? <Signup /> : <Navigate to="/" />}
