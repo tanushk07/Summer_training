@@ -51,7 +51,7 @@ async function checkDatabaseConnection() {
       database: config.database,
       user: config.user,
       password: "****",
-      port: config.port
+      port: config.port,
     };
     console.error("🔒 Connection config used:", safeConfig);
 
@@ -2621,6 +2621,5 @@ router.get("/download/monthlyreport", async (req, res) => {
     res.redirect("/");
   }
 });
-
 
 module.exports = router;
