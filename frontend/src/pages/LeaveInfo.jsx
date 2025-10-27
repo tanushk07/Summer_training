@@ -118,9 +118,23 @@ function LeaveInfo() {
   };
 
   // Download function
-  const handleDownload = () => {
-    window.open(buildApiUrl(API_ENDPOINTS.DOWNLOAD_LEAVE_INFO), "_blank");
-  };
+// Download Excel function with current filters
+const handleDownload = () => {
+  const downloadUrl = buildApiUrlWithQuery(
+    API_ENDPOINTS.DOWNLOAD_LEAVE_INFO,
+    {
+          site: filters.site || "",
+          fromDate: filters.fromDate || "",
+          toDate: filters.toDate || "",
+          holidays: filters.holidays || "",
+          searchTerm: filters.searchTerm || "",
+    }
+  );
+  
+  console.log("Downloading from:", downloadUrl);
+  window.open(downloadUrl, "_blank");
+};
+
 
   return (
     <div className="leaveinfo-container">

@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
   DOWNLOAD_PUNCHING: "/download/punching",
   DOWNLOAD_TOUR_INFO: "/download/tourinfo",
   DOWNLOAD_LEAVE_INFO: "/download/leaveinfo",
+  DOWNLOAD_MONTHLY_REPORT: "/download/monthlyreport",
 };
 
 // Helper function to build full API URLs

@@ -31,6 +31,7 @@ function Dashboard() {
 
   // Fetch dashboard data whenever filters change
   useEffect(() => {
+    const abortController = new AbortController();
     async function fetchDashboardData() {
       setLoading(true);
       setError(null);
@@ -44,13 +45,19 @@ function Dashboard() {
           buildApiUrlWithQuery(API_ENDPOINTS.DASHBOARD, {
             site: filters.site,
             month: filters.month,
-          })
+          }),
+          { signal: abortController.signal }
         );
+        if (abortController.signal.aborted) {
+          return;
+        }
         if (!res.ok) throw new Error("Failed to fetch dashboard data");
 
         const response = await res.json();
         console.log("Dashboard response:", response);
-
+        if (abortController.signal.aborted) {
+          return;
+        }
         if (response.success && response.data) {
           setDashboardData(response.data);
 
@@ -62,16 +69,27 @@ function Dashboard() {
           throw new Error(response.message || "Failed to load dashboard data");
         }
       } catch (err) {
+        if (err.name === "AbortError") {
+          return;
+        }
         console.error("Failed to fetch dashboard data:", err);
         setError("Could not load dashboard data. Please try again.");
       } finally {
-        setLoading(false);
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     }
 
     fetchDashboardData();
+    return () => {
+      abortController.abort();
+    };
   }, [filters]);
-
+  useEffect(() => {
+    setError(null);
+    setLoading(true);
+  }, []);
   // Handle filter changes
   const handleFilterChange = (e) => {
     const { name, value } = e.target;

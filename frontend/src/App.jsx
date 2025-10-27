@@ -96,23 +96,23 @@ function App() {
           <Route path="/" element={user ? <Dashboard /> : <LandingPage />} />
           <Route
             path="/emp_master"
-            element={user ? <EmpMaster /> : <Navigate to="/login" />}
+            element={user ? <EmpMaster /> : <Navigate to="/" />}
           />
           <Route
             path="/leaveinfo"
-            element={user ? <LeaveInfo /> : <Navigate to="/login" />}
+            element={user ? <LeaveInfo /> : <Navigate to="/" />}
           />
           <Route
             path="/monthlyreport"
-            element={user ? <MonthlyReport /> : <Navigate to="/login" />}
+            element={user ? <MonthlyReport /> : <Navigate to="/" />}
           />
           <Route
             path="/punching"
-            element={user ? <Punching /> : <Navigate to="/login" />}
+            element={user ? <Punching /> : <Navigate to="/" />}
           />
           <Route
             path="/tourinfo"
-            element={user ? <TourInfo /> : <Navigate to="/login" />}
+            element={user ? <TourInfo /> : <Navigate to="/" />}
           />
 
           {/* Logout route */}

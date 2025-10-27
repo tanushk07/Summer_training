@@ -119,8 +119,21 @@ function TourInfo() {
 
   // Download function
   const handleDownload = () => {
-    window.open(buildApiUrl(API_ENDPOINTS.DOWNLOAD_TOUR_INFO), "_blank");
+    const downloadUrl = buildApiUrlWithQuery(
+      API_ENDPOINTS.DOWNLOAD_TOUR_INFO,
+      {
+            site: filters.site || "",
+            fromDate: filters.fromDate || "",
+            toDate: filters.toDate || "",
+            holidays: filters.holidays || "",
+            searchTerm: filters.searchTerm || "",
+      }
+    );
+    
+    console.log("Downloading from:", downloadUrl);
+    window.open(downloadUrl, "_blank");
   };
+  
 
   return (
     <div className="tourinfo-container">

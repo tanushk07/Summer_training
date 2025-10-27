@@ -641,8 +641,6 @@ router.post("/logout", (req, res) => {
 // Employee Master endpoint - FIXED
 router.get("/emp_master", async (req, res) => {
   const site = req.query.site || "";
-  const department = req.query.department || "";
-  const searchTerm = req.query.search || "";
 
   let pool;
   try {
@@ -684,27 +682,10 @@ router.get("/emp_master", async (req, res) => {
       request.input("site", sql.VarChar, site);
     }
 
-    if (department && department !== "") {
-      employeeQuery += ` AND d.department_name = @department`;
-      request.input("department", sql.VarChar, department);
-    }
-
-    if (searchTerm && searchTerm !== "") {
-      employeeQuery += ` AND (
-              e.firstname LIKE @search 
-              OR e.lastname LIKE @search 
-              OR e.middlename LIKE @search
-              OR CAST(e.employee_id AS VARCHAR) LIKE @search
-          )`;
-      request.input("search", sql.VarChar, `%${searchTerm}%`);
-    }
-
     employeeQuery += ` ORDER BY e.employee_id`;
 
     console.log("Executing employee query with filters:", {
-      site,
-      department,
-      searchTerm,
+      site
     });
 
     // ============================================================================
@@ -747,8 +728,6 @@ router.get("/emp_master", async (req, res) => {
         departments: departmentsResult.recordset,
         filters: {
           selectedSite: site,
-          selectedDepartment: department,
-          searchTerm: searchTerm,
         },
       },
     });
@@ -760,8 +739,6 @@ router.get("/emp_master", async (req, res) => {
         departments: departmentsResult.recordset,
         filters: {
           selectedSite: site,
-          selectedDepartment: department,
-          searchTerm: searchTerm,
         },
       },
     });
@@ -770,6 +747,157 @@ router.get("/emp_master", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch employee data",
+      message: err.message,
+    });
+  } finally {
+    if (pool) await pool.close();
+  }
+});
+router.get("/download/emp_master", async (req, res) => {
+  const site = req.query.site || "";
+  const department = req.query.department || "";
+  const searchTerm = req.query.searchTerm || "";
+
+  let pool;
+  try {
+    pool = await sql.connect(config);
+
+    // ============================================================================
+    // Same query as the display endpoint
+    // ============================================================================
+    let employeeQuery = `
+      SELECT 
+          e.employee_id,
+          CONCAT(e.firstname, ' ', 
+                 ISNULL(e.middlename + ' ', ''), 
+                 e.lastname) AS full_name,
+          des.designation_name,
+          d.department_name,
+          s.site_name,
+          e.is_active,
+          e.created_at
+      FROM attendance.employee_details e
+      LEFT JOIN attendance.department_site_details dsd 
+          ON e.department_site_id = dsd.department_site_id
+      LEFT JOIN attendance.department_details d 
+          ON dsd.department_id = d.department_id
+      LEFT JOIN attendance.employee_designation_details des 
+          ON des.designation_id = e.designation_id
+      LEFT JOIN attendance.site_details s 
+          ON dsd.site_id = s.site_id
+      WHERE 1=1
+    `;
+
+    // Add filters
+    const request = pool.request();
+
+    if (site && site !== "" && site !== "ALL SITES") {
+      employeeQuery += ` AND s.site_name = @site`;
+      request.input("site", sql.VarChar, site);
+    }
+
+    if (department && department !== "") {
+      employeeQuery += ` AND d.department_name = @department`;
+      request.input("department", sql.VarChar, department);
+    }
+
+    if (searchTerm && searchTerm !== "") {
+      employeeQuery += ` AND (
+          e.firstname LIKE @search 
+          OR e.lastname LIKE @search 
+          OR e.middlename LIKE @search
+          OR CAST(e.employee_id AS VARCHAR) LIKE @search
+      )`;
+      request.input("search", sql.VarChar, `%${searchTerm}%`);
+    }
+
+    employeeQuery += ` ORDER BY e.employee_id`;
+
+    console.log("Executing employee download query with filters:", {
+      site,
+      department,
+      searchTerm,
+    });
+
+    // Execute query
+    const employeeResult = await request.query(employeeQuery);
+
+    console.log(`Exporting ${employeeResult.recordset.length} employees to Excel`);
+
+    // ============================================================================
+    // Create Excel file using ExcelJS
+    // ============================================================================
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Employee Data");
+
+    // Define columns with headers
+    worksheet.columns = [
+      { header: "ID", key: "employee_id", width: 10 },
+      { header: "Name", key: "full_name", width: 30 },
+      { header: "Designation", key: "designation_name", width: 25 },
+      { header: "Department", key: "department_name", width: 25 },
+      { header: "Site", key: "site_name", width: 20 },
+      { header: "Status", key: "is_active", width: 12 },
+      { header: "Created At", key: "created_at", width: 20 },
+    ];
+
+    // Style the header row
+    worksheet.getRow(1).font = { bold: true, size: 12 };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+    worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+    // Add data rows
+    employeeResult.recordset.forEach((employee) => {
+      worksheet.addRow({
+        employee_id: employee.employee_id,
+        full_name: employee.full_name,
+        designation_name: employee.designation_name || "N/A",
+        department_name: employee.department_name || "N/A",
+        site_name: employee.site_name || "N/A",
+        is_active: employee.is_active ? "Active" : "Inactive",
+        created_at: employee.created_at
+          ? moment(employee.created_at).format("YYYY-MM-DD HH:mm:ss")
+          : "N/A",
+      });
+    });
+
+    // Add borders to all cells
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // Generate filename with timestamp
+    const timestamp = moment().format("YYYY-MM-DD_HH-mm-ss");
+    const filename = `Employee_Data_${timestamp}.xlsx`;
+
+    // Set response headers for download
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Write workbook to response
+    await workbook.xlsx.write(res);
+    res.end();
+
+    console.log(`✅ Excel file "${filename}" downloaded successfully`);
+  } catch (err) {
+    console.error("Error generating Excel file:", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate Excel file",
       message: err.message,
     });
   } finally {
@@ -1032,6 +1160,178 @@ router.get("/punching", async (req, res) => {
     if (pool) await pool.close();
   }
 });
+
+router.get("/download/punching", async (req, res) => {
+  const defaultTime1 = "07:00:00";
+  const defaultTime2 = "07:15:00";
+
+  let time1 = req.query.time1 || defaultTime1;
+  let time2 = req.query.time2 || defaultTime2;
+  let fromDate = req.query.fromDate;
+  let toDate = req.query.toDate;
+  const site = req.query.site;
+  const searchTerm = req.query.search || "";
+
+  let pool;
+  try {
+    pool = await sql.connect(config);
+
+    // Same query as display endpoint
+    const punchingQuery = `
+      WITH FirstPunchCTE AS (
+          SELECT
+              a.employee_id,
+              CAST(a.rec_timestamp AS DATE) AS PunchDate,
+              MIN(a.rec_timestamp) AS FirstPunchDateTime
+          FROM attendance.attendance_data a
+          WHERE a.rec_timestamp >= @fromDate 
+            AND a.rec_timestamp < DATEADD(DAY, 1, @toDate)
+            AND a.punch_type = 'IN'
+          GROUP BY a.employee_id, CAST(a.rec_timestamp AS DATE)
+      )
+      SELECT
+          a.employee_id AS ID,
+          CONCAT(e.firstname, ' ', 
+                 ISNULL(e.middlename + ' ', ''), 
+                 e.lastname) AS Name,
+          des.designation_name AS designation,
+          d.department_name AS Department,
+          FORMAT(a.rec_timestamp, 'ddd MMM dd yyyy HH:mm:ss') AS [Punch Date & Time],
+          CASE
+              WHEN CAST(a.rec_timestamp AS TIME) > @time1 THEN 'YES'
+              ELSE 'ON TIME'
+          END AS [Is Late after Time 1?],
+          CASE
+              WHEN CAST(a.rec_timestamp AS TIME) > @time1 THEN
+                  CONVERT(VARCHAR, DATEADD(SECOND, 
+                      DATEDIFF(SECOND, @time1, CAST(a.rec_timestamp AS TIME)), 0), 108)
+              ELSE '0:00:00'
+          END AS [Delayed from Time1],
+          CASE
+              WHEN CAST(a.rec_timestamp AS TIME) > @time2 THEN 'YES'
+              ELSE 'CAME BEFORE ' + @time2
+          END AS [Is Late after Time 2?],
+          CASE
+              WHEN CAST(a.rec_timestamp AS TIME) > @time2 THEN
+                  CONVERT(VARCHAR, DATEADD(SECOND, 
+                      DATEDIFF(SECOND, @time2, CAST(a.rec_timestamp AS TIME)), 0), 108)
+              ELSE '0:00:00'
+          END AS [Delayed from Time 2]
+      FROM attendance.attendance_data a
+      JOIN FirstPunchCTE fp 
+          ON a.employee_id = fp.employee_id 
+          AND a.rec_timestamp = fp.FirstPunchDateTime
+      JOIN attendance.employee_details e 
+          ON a.employee_id = e.employee_id
+      LEFT JOIN attendance.employee_designation_details des 
+          ON e.designation_id = des.designation_id
+      LEFT JOIN attendance.department_site_details dsd 
+          ON e.department_site_id = dsd.department_site_id
+      LEFT JOIN attendance.department_details d 
+          ON dsd.department_id = d.department_id
+      LEFT JOIN attendance.site_details s 
+          ON dsd.site_id = s.site_id
+      WHERE (s.site_name = @site OR @site = 'ALL SITES')
+    `;
+
+    // Add search filter
+    let finalQuery = punchingQuery;
+    if (searchTerm && searchTerm !== "") {
+      finalQuery += ` AND (
+        CAST(a.employee_id AS VARCHAR) LIKE @search
+        OR e.firstname LIKE @search 
+        OR e.lastname LIKE @search 
+        OR e.middlename LIKE @search
+      )`;
+    }
+
+    finalQuery += ` ORDER BY a.rec_timestamp DESC`;
+
+    const request = pool.request();
+    request.input("time1", sql.VarChar, time1);
+    request.input("time2", sql.VarChar, time2);
+    request.input("fromDate", sql.DateTime, fromDate);
+    request.input("toDate", sql.DateTime, toDate);
+    request.input("site", sql.VarChar, site);
+
+    if (searchTerm && searchTerm !== "") {
+      request.input("search", sql.VarChar, `%${searchTerm}%`);
+    }
+
+    const result = await request.query(finalQuery);
+    console.log(`Exporting ${result.recordset.length} punching records to Excel`);
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Punching Data");
+
+    // Define columns
+    worksheet.columns = [
+      { header: "ID", key: "ID", width: 10 },
+      { header: "Name", key: "Name", width: 30 },
+      { header: "Designation", key: "designation", width: 25 },
+      { header: "Department", key: "Department", width: 25 },
+      { header: "Punch Date & Time", key: "Punch Date & Time", width: 30 },
+      { header: "Is Late after Time 1?", key: "Is Late after Time 1?", width: 20 },
+      { header: "Delayed from Time1", key: "Delayed from Time1", width: 20 },
+      { header: "Is Late after Time 2?", key: "Is Late after Time 2?", width: 20 },
+      { header: "Delayed from Time 2", key: "Delayed from Time 2", width: 20 },
+    ];
+
+    // Style header row
+    worksheet.getRow(1).font = { bold: true, size: 12 };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+    worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+    // Add data rows
+    result.recordset.forEach((record) => {
+      worksheet.addRow(record);
+    });
+
+    // Add borders
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // Generate filename
+    const timestamp = moment().format("YYYY-MM-DD_HH-mm-ss");
+    const filename = `Punching_Data_${timestamp}.xlsx`;
+
+    // Set response headers
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Write and send
+    await workbook.xlsx.write(res);
+    res.end();
+
+    console.log(`✅ Excel file "${filename}" downloaded successfully`);
+  } catch (err) {
+    console.error("Error generating punching Excel file:", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate Excel file",
+      message: err.message,
+    });
+  } finally {
+    if (pool) await pool.close();
+  }
+});
+
 // Casual Leave Info endpoint - CORRECTED
 router.get("/leaveinfo", async (req, res) => {
   const holidays = req.query.holidays ? req.query.holidays.split(",") : [];
@@ -1226,6 +1526,225 @@ router.get("/leaveinfo", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch leave information",
+      message: err.message,
+    });
+  } finally {
+    if (pool) await pool.close();
+  }
+});
+router.get("/download/leaveinfo", async (req, res) => {
+  const holidays = req.query.holidays ? req.query.holidays.split(",") : [];
+  const site = req.query.site || "";
+  const fromDate = req.query.fromDate || "";
+  const toDate = req.query.toDate || "";
+  const searchTerm = req.query.search || "";
+
+  let pool;
+  try {
+    pool = await sql.connect(config);
+
+    // Same query as display endpoint
+    let leaveQuery = `
+      SELECT 
+          l.leave_id,
+          l.employee_id,
+          l.begda,
+          l.endda,
+          l.status,
+          l.reason,
+          CONCAT(e.firstname, ' ', 
+                 ISNULL(e.middlename + ' ', ''), 
+                 e.lastname) AS employee_name,
+          d.department_name,
+          s.site_name,
+          (DATEDIFF(DAY, l.begda, l.endda) + 1 
+          - ((DATEPART(WEEK, l.endda) - DATEPART(WEEK, l.begda)) * 2)
+          - (CASE WHEN DATEPART(WEEKDAY, l.begda) = 1 THEN 1 ELSE 0 END)
+          - (CASE WHEN DATEPART(WEEKDAY, l.endda) = 7 THEN 1 ELSE 0 END)
+          ) AS total_leave_days_excluding_weekends
+      FROM attendance.casual_leave_info l
+      JOIN attendance.employee_details e 
+          ON l.employee_id = e.employee_id
+      LEFT JOIN attendance.department_site_details dsd 
+          ON e.department_site_id = dsd.department_site_id
+      LEFT JOIN attendance.department_details d 
+          ON dsd.department_id = d.department_id
+      LEFT JOIN attendance.site_details s 
+          ON dsd.site_id = s.site_id
+      WHERE 1=1
+    `;
+
+    const request = pool.request();
+
+    if (site && site !== "" && site !== "ALL SITES") {
+      leaveQuery += ` AND s.site_name = @site`;
+      request.input("site", sql.VarChar, site);
+    }
+
+    if (fromDate && fromDate !== "") {
+      leaveQuery += ` AND l.begda >= @fromDate`;
+      request.input("fromDate", sql.Date, fromDate);
+    }
+
+    if (toDate && toDate !== "") {
+      leaveQuery += ` AND l.endda <= @toDate`;
+      request.input("toDate", sql.Date, toDate);
+    }
+
+    if (searchTerm && searchTerm !== "") {
+      leaveQuery += ` AND (
+        CAST(l.employee_id AS VARCHAR) LIKE @search
+        OR e.firstname LIKE @search 
+        OR e.lastname LIKE @search 
+        OR e.middlename LIKE @search
+      )`;
+      request.input("search", sql.VarChar, `%${searchTerm}%`);
+    }
+
+    leaveQuery += ` ORDER BY l.begda DESC`;
+
+    const leaveResults = await request.query(leaveQuery);
+
+    // Get totals query
+    const totalsQuery = `
+      SELECT 
+          employee_id,
+          SUM(total_leave_days_excluding_weekends) AS total_leave_days_without_duplication
+      FROM (
+          SELECT 
+              employee_id,
+              (DATEDIFF(DAY, begda, endda) + 1
+              - ((DATEPART(WEEK, endda) - DATEPART(WEEK, begda)) * 2)
+              - (CASE WHEN DATEPART(WEEKDAY, begda) = 1 THEN 1 ELSE 0 END)
+              - (CASE WHEN DATEPART(WEEKDAY, endda) = 7 THEN 1 ELSE 0 END)
+              ) AS total_leave_days_excluding_weekends,
+              begda,
+              endda
+          FROM attendance.casual_leave_info
+          WHERE status = 'Approved'
+      ) AS LeaveDays
+      GROUP BY employee_id
+    `;
+    const totalsResults = await pool.request().query(totalsQuery);
+
+    // Process results with holiday adjustments
+    const finalResults = leaveResults.recordset.map((row) => {
+      const totalDays = totalsResults.recordset.find(
+        (t) => t.employee_id === row.employee_id
+      );
+
+      let holidayCount = 0;
+      let holidayList = [];
+
+      const begdaDate = new Date(row.begda);
+      begdaDate.setHours(0, 0, 0, 0);
+      const enddaDate = new Date(row.endda);
+      enddaDate.setHours(0, 0, 0, 0);
+
+      const holidayDates = holidays.map((holiday) => {
+        const date = new Date(holiday);
+        date.setHours(0, 0, 0, 0);
+        return date;
+      });
+
+      for (
+        let d = new Date(begdaDate);
+        d <= enddaDate;
+        d.setDate(d.getDate() + 1)
+      ) {
+        if (holidayDates.some((holiday) => holiday.getTime() === d.getTime())) {
+          holidayCount += 1;
+          holidayList.push(formatDate(d));
+        }
+      }
+
+      const adjustedTotalLeaveDays = totalDays
+        ? totalDays.total_leave_days_without_duplication - holidayCount
+        : row.total_leave_days_excluding_weekends - holidayCount;
+
+      return {
+        employee_id: row.employee_id,
+        employee_name: row.employee_name,
+        department_name: row.department_name,
+        site_name: row.site_name,
+        begda: formatDate(row.begda),
+        endda: formatDate(row.endda),
+        total_leave_days: row.total_leave_days_excluding_weekends,
+        adjusted_total_leave_days: adjustedTotalLeaveDays,
+        status: row.status,
+        holidays: holidayList.length > 0 ? holidayList.join(", ") : "-",
+        reason: row.reason,
+      };
+    });
+
+    console.log(`Exporting ${finalResults.length} leave records to Excel`);
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Leave Information");
+
+    // Define columns
+    worksheet.columns = [
+      { header: "Employee ID", key: "employee_id", width: 12 },
+      { header: "Employee Name", key: "employee_name", width: 30 },
+      { header: "Department", key: "department_name", width: 25 },
+      { header: "Site", key: "site_name", width: 20 },
+      { header: "Start Date", key: "begda", width: 15 },
+      { header: "End Date", key: "endda", width: 15 },
+      { header: "Total Days", key: "total_leave_days", width: 12 },
+      { header: "Adjusted Days", key: "adjusted_total_leave_days", width: 15 },
+      { header: "Status", key: "status", width: 12 },
+      { header: "Holidays", key: "holidays", width: 25 },
+      { header: "Reason", key: "reason", width: 25 },
+    ];
+
+    // Style header row
+    worksheet.getRow(1).font = { bold: true, size: 12 };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+    worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+    // Add data rows
+    finalResults.forEach((record) => {
+      worksheet.addRow(record);
+    });
+
+    // Add borders
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // Generate filename
+    const timestamp = moment().format("YYYY-MM-DD_HH-mm-ss");
+    const filename = `Leave_Information_${timestamp}.xlsx`;
+
+    // Set response headers
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Write and send
+    await workbook.xlsx.write(res);
+    res.end();
+
+    console.log(`✅ Excel file "${filename}" downloaded successfully`);
+  } catch (err) {
+    console.error("Error generating leave info Excel file:", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate Excel file",
       message: err.message,
     });
   } finally {
@@ -1528,6 +2047,227 @@ router.get("/tourinfo", async (req, res) => {
     if (pool) await pool.close();
   }
 });
+
+router.get("/download/tourinfo", async (req, res) => {
+  const holidays = req.query.holidays ? req.query.holidays.split(",") : [];
+  const site = req.query.site || "";
+  const fromDate = req.query.fromDate || "";
+  const toDate = req.query.toDate || "";
+  const searchTerm = req.query.searchTerm || "";
+
+  let pool;
+  try {
+    pool = await sql.connect(config);
+
+    // Same query as display endpoint
+    let tourQuery = `
+      SELECT 
+          t.tour_id,
+          t.employee_id,
+          t.begda,
+          t.endda,
+          t.status,
+          t.reason,
+          CONCAT(e.firstname, ' ', 
+                 ISNULL(e.middlename + ' ', ''), 
+                 e.lastname) AS employee_name,
+          d.department_name,
+          s.site_name,
+          (DATEDIFF(DAY, t.begda, t.endda) + 1 
+          - ((DATEPART(WEEK, t.endda) - DATEPART(WEEK, t.begda)) * 2)
+          - (CASE WHEN DATEPART(WEEKDAY, t.begda) = 1 THEN 1 ELSE 0 END)
+          - (CASE WHEN DATEPART(WEEKDAY, t.endda) = 7 THEN 1 ELSE 0 END)
+          ) AS total_tour_days_excluding_weekends
+      FROM attendance.tour_leave_info t
+      JOIN attendance.employee_details e 
+          ON t.employee_id = e.employee_id
+      LEFT JOIN attendance.department_site_details dsd 
+          ON e.department_site_id = dsd.department_site_id
+      LEFT JOIN attendance.department_details d 
+          ON dsd.department_id = d.department_id
+      LEFT JOIN attendance.site_details s 
+          ON dsd.site_id = s.site_id
+      WHERE 1=1
+    `;
+
+    const request = pool.request();
+
+    if (site && site !== "" && site !== "ALL SITES") {
+      tourQuery += ` AND s.site_name = @site`;
+      request.input("site", sql.VarChar, site);
+    }
+
+    if (fromDate && fromDate !== "") {
+      tourQuery += ` AND t.begda >= @fromDate`;
+      request.input("fromDate", sql.Date, fromDate);
+    }
+
+    if (toDate && toDate !== "") {
+      tourQuery += ` AND t.endda <= @toDate`;
+      request.input("toDate", sql.Date, toDate);
+    }
+
+    if (searchTerm && searchTerm !== "") {
+      tourQuery += ` AND (
+        CAST(t.employee_id AS VARCHAR) LIKE @search
+        OR e.firstname LIKE @search 
+        OR e.lastname LIKE @search 
+        OR e.middlename LIKE @search
+      )`;
+      request.input("search", sql.VarChar, `%${searchTerm}%`);
+    }
+
+    tourQuery += ` ORDER BY t.begda DESC`;
+
+    const tourResults = await request.query(tourQuery);
+
+    // Get totals query
+    const totalsQuery = `
+      SELECT 
+          employee_id,
+          SUM(total_tour_days_excluding_weekends) AS total_tour_days_without_duplication
+      FROM (
+          SELECT 
+              employee_id,
+              (DATEDIFF(DAY, begda, endda) + 1
+              - ((DATEPART(WEEK, endda) - DATEPART(WEEK, begda)) * 2)
+              - (CASE WHEN DATEPART(WEEKDAY, begda) = 1 THEN 1 ELSE 0 END)
+              - (CASE WHEN DATEPART(WEEKDAY, endda) = 7 THEN 1 ELSE 0 END)
+              ) AS total_tour_days_excluding_weekends,
+              begda,
+              endda
+          FROM attendance.tour_leave_info
+          WHERE status = 'Approved'
+      ) AS TourDays
+      GROUP BY employee_id
+    `;
+    const totalsResults = await pool.request().query(totalsQuery);
+
+    // Process results with holiday adjustments
+    const finalResults = tourResults.recordset.map((row) => {
+      const totalDays = totalsResults.recordset.find(
+        (t) => t.employee_id === row.employee_id
+      );
+
+      let holidayCount = 0;
+      let holidayList = [];
+
+      const begdaDate = new Date(row.begda);
+      begdaDate.setHours(0, 0, 0, 0);
+      const enddaDate = new Date(row.endda);
+      enddaDate.setHours(0, 0, 0, 0);
+
+      const holidayDates = holidays.map((holiday) => {
+        const date = new Date(holiday);
+        date.setHours(0, 0, 0, 0);
+        return date;
+      });
+
+      for (
+        let d = new Date(begdaDate);
+        d <= enddaDate;
+        d.setDate(d.getDate() + 1)
+      ) {
+        if (holidayDates.some((holiday) => holiday.getTime() === d.getTime())) {
+          holidayCount += 1;
+          holidayList.push(formatDate(d));
+        }
+      }
+
+      const adjustedTotalTourDays = totalDays
+        ? totalDays.total_tour_days_without_duplication - holidayCount
+        : row.total_tour_days_excluding_weekends - holidayCount;
+
+      return {
+        employee_id: row.employee_id,
+        employee_name: row.employee_name,
+        department_name: row.department_name,
+        site_name: row.site_name,
+        begda: formatDate(row.begda),
+        endda: formatDate(row.endda),
+        total_tour_days: row.total_tour_days_excluding_weekends,
+        adjusted_total_tour_days: adjustedTotalTourDays,
+        status: row.status,
+        holidays: holidayList.length > 0 ? holidayList.join(", ") : "-",
+        reason: row.reason,
+      };
+    });
+
+    console.log(`Exporting ${finalResults.length} tour records to Excel`);
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Tour Information");
+
+    // Define columns
+    worksheet.columns = [
+      { header: "Employee ID", key: "employee_id", width: 12 },
+      { header: "Employee Name", key: "employee_name", width: 30 },
+      { header: "Department", key: "department_name", width: 25 },
+      { header: "Site", key: "site_name", width: 20 },
+      { header: "Start Date", key: "begda", width: 15 },
+      { header: "End Date", key: "endda", width: 15 },
+      { header: "Total Days", key: "total_tour_days", width: 12 },
+      { header: "Adjusted Days", key: "adjusted_total_tour_days", width: 15 },
+      { header: "Status", key: "status", width: 12 },
+      { header: "Holidays", key: "holidays", width: 25 },
+      { header: "Reason", key: "reason", width: 25 },
+    ];
+
+    // Style header row
+    worksheet.getRow(1).font = { bold: true, size: 12 };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+    worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+    // Add data rows
+    finalResults.forEach((record) => {
+      worksheet.addRow(record);
+    });
+
+    // Add borders
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // Generate filename
+    const timestamp = moment().format("YYYY-MM-DD_HH-mm-ss");
+    const filename = `Tour_Information_${timestamp}.xlsx`;
+
+    // Set response headers
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Write and send
+    await workbook.xlsx.write(res);
+    res.end();
+
+    console.log(`✅ Excel file "${filename}" downloaded successfully`);
+  } catch (err) {
+    console.error("Error generating tour info Excel file:", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate Excel file",
+      message: err.message,
+    });
+  } finally {
+    if (pool) await pool.close();
+  }
+});
+
 
 // Monthly Report endpoint - Updated for new database
 router.get("/monthlyreport", async (req, res) => {
@@ -1947,6 +2687,505 @@ router.get("/monthlyreport", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch monthly report",
+      message: err.message,
+    });
+  } finally {
+    if (pool) await pool.close();
+  }
+});
+router.get("/download/monthlyreport", async (req, res) => {
+  const { fromDate, toDate } = req.query;
+  const site = req.query.site || "ALL SITES";
+  const defaultTime1 = "07:00:00";
+  const defaultTime2 = "07:15:00";
+  let time1 = req.query.time1 || defaultTime1;
+  let time2 = req.query.time2 || defaultTime2;
+  const searchTerm = req.query.searchTerm || "";
+
+  let pool;
+  try {
+    pool = await sql.connect(config);
+
+    // ============================================================================
+    // QUERY 1: Get all employees with details
+    // ============================================================================
+    const employeeQuery = `
+      SELECT 
+          e.employee_id,
+          e.firstname,
+          e.middlename,
+          e.lastname,
+          CONCAT(e.firstname, ' ', 
+                 ISNULL(e.middlename + ' ', ''), 
+                 e.lastname) AS full_name,
+          d.department_name,
+          des.designation_name,
+          s.site_name
+      FROM attendance.employee_details e
+      LEFT JOIN attendance.department_site_details dsd 
+          ON e.department_site_id = dsd.department_site_id
+      LEFT JOIN attendance.department_details d 
+          ON dsd.department_id = d.department_id
+      LEFT JOIN attendance.employee_designation_details des 
+          ON des.designation_id = e.designation_id
+      LEFT JOIN attendance.site_details s 
+          ON dsd.site_id = s.site_id
+      WHERE (s.site_name = @site OR @site = 'ALL SITES')
+    `;
+
+    let finalEmployeeQuery = employeeQuery;
+    const request = pool.request();
+    request.input("site", sql.VarChar, site);
+
+    if (searchTerm && searchTerm !== "") {
+      finalEmployeeQuery += ` AND (
+        CAST(e.employee_id AS VARCHAR) LIKE @search
+        OR e.firstname LIKE @search 
+        OR e.lastname LIKE @search 
+        OR e.middlename LIKE @search
+      )`;
+      request.input("search", sql.VarChar, `%${searchTerm}%`);
+    }
+
+    const employeeResult = await request.query(finalEmployeeQuery);
+
+    // ============================================================================
+    // QUERY 2: Get punch data
+    // ============================================================================
+    const punchDataQuery = `
+      WITH FirstPunches AS (
+          SELECT
+              a.employee_id,
+              MIN(a.rec_timestamp) AS FirstPunchTimestamp
+          FROM attendance.attendance_data a
+          WHERE a.rec_timestamp >= @fromDate 
+            AND a.rec_timestamp < DATEADD(DAY, 1, @toDate)
+            AND a.punch_type = 'IN'
+          GROUP BY a.employee_id, CAST(a.rec_timestamp AS DATE)
+      )
+      SELECT 
+          fp.employee_id AS Employee_ID,
+          COUNT(CASE WHEN CAST(fp.FirstPunchTimestamp AS TIME) > @time1 THEN 1 END) AS NoOfDaysBeyond10,
+          SUM(CASE WHEN CAST(fp.FirstPunchTimestamp AS TIME) > @time1 THEN 
+              CAST(DATEDIFF(SECOND, @time1, CAST(fp.FirstPunchTimestamp AS TIME)) AS BIGINT)
+          END) AS TotalTimeDelayBeyond10InSeconds,
+          COUNT(CASE WHEN CAST(fp.FirstPunchTimestamp AS TIME) > @time2 THEN 1 END) AS NoOfDaysBeyond1015,
+          SUM(CASE WHEN CAST(fp.FirstPunchTimestamp AS TIME) > @time2 THEN 
+              CAST(DATEDIFF(SECOND, @time2, CAST(fp.FirstPunchTimestamp AS TIME)) AS BIGINT)
+          END) AS TotalTimeDelayBeyond1015InSeconds
+      FROM FirstPunches fp
+      GROUP BY fp.employee_id
+    `;
+
+    const punchDataResult = await pool
+      .request()
+      .input("fromDate", sql.DateTime, fromDate)
+      .input("toDate", sql.DateTime, toDate)
+      .input("time1", sql.VarChar, time1)
+      .input("time2", sql.VarChar, time2)
+      .query(punchDataQuery);
+
+    // ============================================================================
+    // QUERY 3 & 4: Get leave and tour days
+    // ============================================================================
+    const leaveDaysQuery = `
+      SELECT 
+          employee_id AS Employee_ID,
+          SUM(
+              DATEDIFF(DAY, begda, endda) + 1
+              - ((DATEPART(WEEK, endda) - DATEPART(WEEK, begda)) * 2)
+              - (CASE WHEN DATEPART(WEEKDAY, begda) = 1 THEN 1 ELSE 0 END)
+              - (CASE WHEN DATEPART(WEEKDAY, endda) = 7 THEN 1 ELSE 0 END)
+          ) AS TotalTourDaysWithoutDuplication
+      FROM attendance.casual_leave_info
+      WHERE begda >= @fromDate AND endda <= @toDate AND status = 'Approved'
+      GROUP BY employee_id
+    `;
+
+    const tourDaysQuery = `
+      SELECT 
+          employee_id AS Employee_ID,
+          SUM(
+              DATEDIFF(DAY, begda, endda) + 1
+              - ((DATEPART(WEEK, endda) - DATEPART(WEEK, begda)) * 2)
+              - (CASE WHEN DATEPART(WEEKDAY, begda) = 1 THEN 1 ELSE 0 END)
+              - (CASE WHEN DATEPART(WEEKDAY, endda) = 7 THEN 1 ELSE 0 END)
+          ) AS TotalTourDaysWithoutDuplication
+      FROM attendance.tour_leave_info
+      WHERE begda >= @fromDate AND endda <= @toDate AND status = 'Approved'
+      GROUP BY employee_id
+    `;
+
+    const leaveDaysResult = await pool
+      .request()
+      .input("fromDate", sql.DateTime, fromDate)
+      .input("toDate", sql.DateTime, toDate)
+      .query(leaveDaysQuery);
+
+    const tourDaysResult = await pool
+      .request()
+      .input("fromDate", sql.DateTime, fromDate)
+      .input("toDate", sql.DateTime, toDate)
+      .query(tourDaysQuery);
+
+    // ============================================================================
+    // QUERY 5: Get absentee data
+    // ============================================================================
+    const absenteesQuery = `
+      WITH WorkingDays AS (
+          SELECT CAST(@fromDate AS DATE) AS WorkDate
+          UNION ALL
+          SELECT DATEADD(DAY, 1, WorkDate)
+          FROM WorkingDays
+          WHERE DATEADD(DAY, 1, WorkDate) <= @toDate
+      ),
+      FilteredWorkingDays AS (
+          SELECT WorkDate
+          FROM WorkingDays
+          WHERE DATENAME(WEEKDAY, WorkDate) IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+      ),
+      PresentDays AS (
+          SELECT 
+              a.employee_id AS Employee_ID,
+              COUNT(DISTINCT CAST(a.rec_timestamp AS DATE)) AS PresentDays
+          FROM attendance.attendance_data a
+          WHERE a.rec_timestamp >= @fromDate 
+            AND a.rec_timestamp < DATEADD(DAY, 1, @toDate)
+            AND a.punch_type = 'IN'
+          GROUP BY a.employee_id
+      ),
+      TotalWorkingDays AS (
+          SELECT COUNT(WorkDate) AS TotalDays
+          FROM FilteredWorkingDays
+      )
+      SELECT 
+          e.employee_id AS Employee_ID,
+          ISNULL(twd.TotalDays, 0) AS TotalWorkingDays,
+          ISNULL(pd.PresentDays, 0) AS PresentDays,
+          CASE 
+              WHEN ISNULL(twd.TotalDays, 0) - ISNULL(pd.PresentDays, 0) < 0 THEN 0
+              ELSE ISNULL(twd.TotalDays, 0) - ISNULL(pd.PresentDays, 0)
+          END AS AbsentDays
+      FROM attendance.employee_details e
+      CROSS JOIN TotalWorkingDays twd
+      LEFT JOIN PresentDays pd ON e.employee_id = pd.Employee_ID
+      OPTION (MAXRECURSION 0)
+    `;
+
+    const absenteesResult = await pool
+      .request()
+      .input("fromDate", sql.DateTime, fromDate)
+      .input("toDate", sql.DateTime, toDate)
+      .query(absenteesQuery);
+
+    // ============================================================================
+    // QUERY 6: Summary statistics
+    // ============================================================================
+    const summaryQuery = `
+      DECLARE @workingDays INT;
+      WITH WorkingDays AS (
+          SELECT CAST(@fromDate AS DATE) AS WorkDate
+          UNION ALL
+          SELECT DATEADD(DAY, 1, WorkDate)
+          FROM WorkingDays
+          WHERE DATEADD(DAY, 1, WorkDate) <= @toDate
+      ),
+      FilteredWorkingDays AS (
+          SELECT WorkDate
+          FROM WorkingDays
+          WHERE DATENAME(WEEKDAY, WorkDate) IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+      )
+      SELECT @workingDays = COUNT(WorkDate)
+      FROM FilteredWorkingDays
+      OPTION (MAXRECURSION 0);
+
+      DECLARE @totalEmployees INT;
+      SET @totalEmployees = (SELECT COUNT(DISTINCT e.employee_id) FROM attendance.employee_details e);
+
+      DECLARE @latePunches10_00 INT;
+      WITH FirstPunches AS (
+          SELECT a.employee_id, MIN(a.rec_timestamp) AS FirstPunchTimestamp
+          FROM attendance.attendance_data a
+          WHERE a.rec_timestamp >= @fromDate AND a.rec_timestamp < DATEADD(DAY, 1, @toDate) AND a.punch_type = 'IN'
+          GROUP BY a.employee_id, CAST(a.rec_timestamp AS DATE)
+      )
+      SELECT @latePunches10_00 = COUNT(DISTINCT employee_id)
+      FROM FirstPunches
+      WHERE CAST(FirstPunchTimestamp AS TIME) > @time1;
+
+      DECLARE @latePunches10_15 INT;
+      WITH FirstPunches AS (
+          SELECT a.employee_id, MIN(a.rec_timestamp) AS FirstPunchTimestamp
+          FROM attendance.attendance_data a
+          WHERE a.rec_timestamp >= @fromDate AND a.rec_timestamp < DATEADD(DAY, 1, @toDate) AND a.punch_type = 'IN'
+          GROUP BY a.employee_id, CAST(a.rec_timestamp AS DATE)
+      )
+      SELECT @latePunches10_15 = COUNT(DISTINCT employee_id)
+      FROM FirstPunches
+      WHERE CAST(FirstPunchTimestamp AS TIME) > @time2;
+
+      SELECT 
+          @workingDays AS No_of_Working_Days_in_the_Month,
+          @totalEmployees AS Total_Employees_in_the_Month,
+          @latePunches10_00 AS No_of_Times_beyond_Time1,
+          @latePunches10_15 AS No_of_Times_beyond_Time2
+    `;
+
+    const summaryResult = await pool
+      .request()
+      .input("fromDate", sql.DateTime, fromDate)
+      .input("toDate", sql.DateTime, toDate)
+      .input("time1", sql.VarChar, time1)
+      .input("time2", sql.VarChar, time2)
+      .query(summaryQuery);
+
+    // ============================================================================
+    // Combine results
+    // ============================================================================
+    const combinedResults = employeeResult.recordset.map((employee) => {
+      const punchData =
+        punchDataResult.recordset.find((p) => p.Employee_ID == employee.employee_id) || {};
+      const leaveData =
+        leaveDaysResult.recordset.find((l) => l.Employee_ID == employee.employee_id) || {};
+      const tourData =
+        tourDaysResult.recordset.find((t) => t.Employee_ID == employee.employee_id) || {};
+      const absenteeData =
+        absenteesResult.recordset.find((a) => a.Employee_ID == employee.employee_id) || {};
+
+      return {
+        employee_id: employee.employee_id,
+        full_name: employee.full_name,
+        designation: employee.designation_name || "N/A",
+        department_name: employee.department_name || "N/A",
+        site_name: employee.site_name || "N/A",
+        NoOfDaysBeyond10: punchData.NoOfDaysBeyond10 || 0,
+        TotalTimeDelayBeyond10: punchData.TotalTimeDelayBeyond10InSeconds
+          ? formatTime(punchData.TotalTimeDelayBeyond10InSeconds)
+          : "00:00:00",
+        NoOfDaysBeyond1015: punchData.NoOfDaysBeyond1015 || 0,
+        TotalTimeDelayBeyond1015: punchData.TotalTimeDelayBeyond1015InSeconds
+          ? formatTime(punchData.TotalTimeDelayBeyond1015InSeconds)
+          : "00:00:00",
+        TotalEACSAbsentDays: absenteeData.AbsentDays || 0,
+        TotalLeaveDays: leaveData.TotalTourDaysWithoutDuplication || 0,
+        TotalDaysOnTour: tourData.TotalTourDaysWithoutDuplication || 0,
+      };
+    });
+
+    // Calculate Late Punches Statistics
+    const latePunchesStatistics = {
+      ">80%": { Beyond10: 0, Beyond1015: 0 },
+      "70-80%": { Beyond10: 0, Beyond1015: 0 },
+      "60-70%": { Beyond10: 0, Beyond1015: 0 },
+      "50-60%": { Beyond10: 0, Beyond1015: 0 },
+      "40-50%": { Beyond10: 0, Beyond1015: 0 },
+      "30-40%": { Beyond10: 0, Beyond1015: 0 },
+      "20-30%": { Beyond10: 0, Beyond1015: 0 },
+      "<20%": { Beyond10: 0, Beyond1015: 0 },
+    };
+
+    const totalWorkingDays = summaryResult.recordset[0].No_of_Working_Days_in_the_Month;
+
+    punchDataResult.recordset.forEach((record) => {
+      const daysBeyond10Percent = (record.NoOfDaysBeyond10 / totalWorkingDays) * 100;
+      const daysBeyond1015Percent = (record.NoOfDaysBeyond1015 / totalWorkingDays) * 100;
+
+      const range = getRange(daysBeyond10Percent);
+      if (range) latePunchesStatistics[range].Beyond10++;
+
+      const range1015 = getRange(daysBeyond1015Percent);
+      if (range1015) latePunchesStatistics[range1015].Beyond1015++;
+    });
+
+    function getRange(percent) {
+      if (percent > 80) return ">80%";
+      if (percent > 70) return "70-80%";
+      if (percent > 60) return "60-70%";
+      if (percent > 50) return "50-60%";
+      if (percent > 40) return "40-50%";
+      if (percent > 30) return "30-40%";
+      if (percent > 20) return "20-30%";
+      if (percent <= 20) return "<20%";
+      return null;
+    }
+
+    console.log(`Exporting ${combinedResults.length} monthly report records to Excel`);
+
+    // ============================================================================
+    // CREATE EXCEL WORKBOOK WITH MULTIPLE SHEETS
+    // ============================================================================
+    const workbook = new ExcelJS.Workbook();
+
+    // ============================================================================
+    // SHEET 1: Summary Statistics
+    // ============================================================================
+    const summarySheet = workbook.addWorksheet("Summary");
+
+    // Add title
+    summarySheet.mergeCells("A1:B1");
+    const titleCell = summarySheet.getCell("A1");
+    titleCell.value = "Monthly Report Summary";
+    titleCell.font = { bold: true, size: 16 };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    titleCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+
+    summarySheet.getRow(1).height = 30;
+
+    // Add summary data
+    const summary = summaryResult.recordset[0];
+    summarySheet.addRow(["", ""]); // Empty row
+    summarySheet.addRow(["No. of Working Days in the month:", summary.No_of_Working_Days_in_the_Month]);
+    summarySheet.addRow(["Total Employees in the month:", summary.Total_Employees_in_the_Month]);
+    summarySheet.addRow(["", ""]);
+    summarySheet.addRow(["TOTAL LATE PUNCHES DURING THE MONTH", ""]);
+    summarySheet.addRow(["No. of Times beyond Time1:", summary.No_of_Times_beyond_Time1]);
+    summarySheet.addRow(["No. of Times beyond Time2:", summary.No_of_Times_beyond_Time2]);
+
+    // Style summary cells
+    summarySheet.getColumn(1).width = 40;
+    summarySheet.getColumn(2).width = 20;
+
+    summarySheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+          if (rowNumber === 6) {
+            cell.font = { bold: true };
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFFFD966" },
+            };
+          }
+        });
+      }
+    });
+
+    // ============================================================================
+    // SHEET 2: Late Punches Profile
+    // ============================================================================
+    const latePunchSheet = workbook.addWorksheet("Late Punches Profile");
+
+    // Add title
+    latePunchSheet.mergeCells("A1:C1");
+    const lpTitleCell = latePunchSheet.getCell("A1");
+    lpTitleCell.value = "Late Punches Profile";
+    lpTitleCell.font = { bold: true, size: 16 };
+    lpTitleCell.alignment = { horizontal: "center", vertical: "middle" };
+    lpTitleCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF70AD47" },
+    };
+    latePunchSheet.getRow(1).height = 30;
+
+    // Add headers
+    latePunchSheet.addRow(["% of Days in Month", "Beyond 07:00", "Beyond 07:15"]);
+    latePunchSheet.getRow(2).font = { bold: true };
+    latePunchSheet.getRow(2).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+
+    // Add data
+    Object.entries(latePunchesStatistics).forEach(([range, data]) => {
+      latePunchSheet.addRow([range, data.Beyond10, data.Beyond1015]);
+    });
+
+    // Style columns
+    latePunchSheet.getColumn(1).width = 20;
+    latePunchSheet.getColumn(2).width = 15;
+    latePunchSheet.getColumn(3).width = 15;
+
+    // Add borders
+    latePunchSheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // ============================================================================
+    // SHEET 3: Employee Data (Main Report)
+    // ============================================================================
+    const dataSheet = workbook.addWorksheet("Employee Data");
+
+    // Define columns
+    dataSheet.columns = [
+      { header: "CPF ID", key: "employee_id", width: 12 },
+      { header: "Name", key: "full_name", width: 30 },
+      { header: "Designation", key: "designation", width: 25 },
+      { header: "Department", key: "department_name", width: 25 },
+      { header: "Site", key: "site_name", width: 20 },
+      { header: "No. of Days Beyond 07:00", key: "NoOfDaysBeyond10", width: 25 },
+      { header: "Total Time Delay Beyond 07:00", key: "TotalTimeDelayBeyond10", width: 30 },
+      { header: "No. of Days Beyond 07:15", key: "NoOfDaysBeyond1015", width: 25 },
+      { header: "Total Time Delay Beyond 07:15", key: "TotalTimeDelayBeyond1015", width: 30 },
+      { header: "Total EACS Absent Days", key: "TotalEACSAbsentDays", width: 22 },
+      { header: "Total Leave Days", key: "TotalLeaveDays", width: 18 },
+    ];
+
+    // Style header
+    dataSheet.getRow(1).font = { bold: true, size: 12 };
+    dataSheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    dataSheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+    // Add data
+    combinedResults.forEach((record) => {
+      dataSheet.addRow(record);
+    });
+
+    // Add borders
+    dataSheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // Generate filename
+    const timestamp = moment().format("YYYY-MM-DD_HH-mm-ss");
+    const filename = `Monthly_Report_${timestamp}.xlsx`;
+
+    // Set response headers
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Write and send
+    await workbook.xlsx.write(res);
+    res.end();
+
+    console.log(`✅ Excel file "${filename}" downloaded successfully`);
+  } catch (err) {
+    console.error("Error generating monthly report Excel file:", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate Excel file",
       message: err.message,
     });
   } finally {

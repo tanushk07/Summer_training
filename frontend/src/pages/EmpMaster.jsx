@@ -27,13 +27,11 @@ function EmpMaster() {
 
       const query = new URLSearchParams();
       if (filters.site) query.append("site", filters.site);
-      if (filters.search) query.append("search", filters.search);
 
       try {
         const res = await fetch(
           buildApiUrlWithQuery(API_ENDPOINTS.EMP_MASTER, {
             site: filters.site,
-            search: filters.search,
           })
         );
         const response = await res.json();
@@ -54,23 +52,36 @@ function EmpMaster() {
     }
 
     fetchEmployees();
-  }, [filters.site, filters.search]);
+  }, [filters.site]);
 
   // Handle site filter change
   const handleSiteChange = (e) => {
     setFilters((prev) => ({ ...prev, site: e.target.value }));
+    setCurrentPage(1);
   };
-
-  // Handle search input
   const handleSearchChange = (e) => {
     setFilters((prev) => ({ ...prev, search: e.target.value }));
+    setCurrentPage(1); // Reset to page 1 when searching
   };
+  const filteredEmployees = employees.filter((emp) => {
+    if (!filters.search) return true;
+    const searchLower = filters.search.toLowerCase();
+    return (
+      emp.employee_id?.toString().includes(searchLower) ||
+      emp.full_name?.toLowerCase().includes(searchLower) ||
+      emp.firstname?.toLowerCase().includes(searchLower) ||
+      emp.lastname?.toLowerCase().includes(searchLower) ||
+      emp.middlename?.toLowerCase().includes(searchLower) ||
+      emp.department_name?.toLowerCase().includes(searchLower) ||
+      emp.designation_name?.toLowerCase().includes(searchLower)
+    );
+  });
 
-  // Pagination logic
-  const totalPages = Math.ceil(employees.length / rowsPerPage);
+  // ✅ Pagination on filtered data - same as LeaveInfo
+  const totalPages = Math.ceil(filteredEmployees.length / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const endIndex = startIndex + rowsPerPage;
-  const currentEmployees = employees.slice(startIndex, endIndex);
+  const currentEmployees = filteredEmployees.slice(startIndex, endIndex);
 
   const goToPrevPage = () => {
     if (currentPage > 1) setCurrentPage((prev) => prev - 1);
@@ -79,10 +90,38 @@ function EmpMaster() {
   const goToNextPage = () => {
     if (currentPage < totalPages) setCurrentPage((prev) => prev + 1);
   };
+  // // Handle search input
+  // const handleSearchChange = (e) => {
+  //   setFilters((prev) => ({ ...prev, search: e.target.value }));
+  // };
+
+  // // Pagination logic
+  // const totalPages = Math.ceil(employees.length / rowsPerPage);
+  // const startIndex = (currentPage - 1) * rowsPerPage;
+  // const endIndex = startIndex + rowsPerPage;
+  // const currentEmployees = employees.slice(startIndex, endIndex);
+
+  // const goToPrevPage = () => {
+  //   if (currentPage > 1) setCurrentPage((prev) => prev - 1);
+  // };
+
+  // const goToNextPage = () => {
+  //   if (currentPage < totalPages) setCurrentPage((prev) => prev + 1);
+  // };
 
   // Download CSV function
+  // Download Excel function with current filters
   const handleDownload = () => {
-    window.open(buildApiUrl(API_ENDPOINTS.DOWNLOAD_EMP_MASTER), "_blank");
+    const downloadUrl = buildApiUrlWithQuery(
+      API_ENDPOINTS.DOWNLOAD_EMP_MASTER,
+      {
+        site: filters.site || "",
+        searchTerm: filters.search || "",
+      }
+    );
+
+    console.log("Downloading from:", downloadUrl);
+    window.open(downloadUrl, "_blank");
   };
 
   if (loading) {

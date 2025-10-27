@@ -134,7 +134,18 @@ function Punching() {
 
   // Download function
   const handleDownload = () => {
-    window.open(buildApiUrl(API_ENDPOINTS.DOWNLOAD_PUNCHING), "_blank");
+    const downloadUrl = buildApiUrlWithQuery(API_ENDPOINTS.DOWNLOAD_PUNCHING, {
+      site: filters.site,
+      fromDate: filters.fromDate,
+      toDate: filters.toDate,
+      time1: `${filters.time1}:00`,
+      time2: `${filters.time2}:00`,
+      searchTerm: filters.searchTerm || '',
+
+    });
+
+    console.log("Downloading from:", downloadUrl);
+    window.open(downloadUrl, "_blank");
   };
 
   return (
@@ -152,7 +163,7 @@ function Punching() {
               onChange={handleFilterChange}
               className="filter-select"
             >
-              <option value="ALL SITES">CHOOSE</option>
+              <option value="ALL SITES">All SITES</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_name}>
                   {site.site_name}

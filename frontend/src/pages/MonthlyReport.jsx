@@ -120,7 +120,23 @@ function MonthlyReport() {
       record.department_name?.toLowerCase().includes(searchLower)
     );
   });
-
+  const handleDownload = () => {
+    const downloadUrl = buildApiUrlWithQuery(
+      API_ENDPOINTS.DOWNLOAD_MONTHLY_REPORT,
+      {
+        site: filters.site,
+        fromDate: filters.fromDate,
+        toDate: filters.toDate,
+        time1: `${filters.time1}:00`,
+        time2: `${filters.time2}:00`,
+        searchTerm: filters.searchTerm,
+      }
+    );
+    
+    console.log("Downloading from:", downloadUrl);
+    window.open(downloadUrl, "_blank");
+  };
+  
   // Pagination
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
@@ -362,7 +378,7 @@ function MonthlyReport() {
                 className="search-input-monthly"
               />
             </div>
-            <button className="download-btn-monthly">Download</button>
+            <button className="download-btn-monthly" onClick={handleDownload}>Download</button>
           </div>
 
           {/* Main Data Table */}
