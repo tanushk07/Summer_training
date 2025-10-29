@@ -64,23 +64,23 @@ hbs.registerHelper("json", function (context) {
 // Routes
 app.use("/", apiRoutes);
 
-app.get("/login", (req, res) => {
-  res.render("login");
-});
+// app.get("/login", (req, res) => {
+//   res.render("login");
+// });
 
-app.get("/signup", (req, res) => {
-  res.render("signup");
-});
+// app.get("/signup", (req, res) => {
+//   res.render("signup");
+// });
 
-app.get("/logout", (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      return next(err);
-    }
-    res.clearCookie("connect.sid");
-    res.redirect("/");
-  });
-});
+// app.get("/logout", (req, res) => {
+//   req.session.destroy((err) => {
+//     if (err) {
+//       return next(err);
+//     }
+//     res.clearCookie("connect.sid");
+//     res.redirect("/");
+//   });
+// });
 
 // Start server
 app.listen(port, () => {

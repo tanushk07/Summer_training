@@ -10,7 +10,7 @@ function Footer() {
       />
       <hr style={{ color: 'white' }} />
       <div className="bottom" style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <p>© 2024 The Oil and Natural Gas Corporation. All rights reserved.</p>
+        <p>© 2025 The Oil and Natural Gas Corporation. All rights reserved.</p>
       </div>
     </footer>
   );

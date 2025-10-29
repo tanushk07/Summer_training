@@ -8,9 +8,10 @@ import PieChart from "../components/Charts/PieChart";
 import { buildApiUrlWithQuery, API_ENDPOINTS } from "../config/api";
 function Dashboard() {
   const { user } = useContext(UserContext);
+  const currmonth = new Date().toISOString().slice(0, 7);
   const [filters, setFilters] = useState({
     site: "",
-    month: "",
+    month: currmonth,
   });
   const [sites, setSites] = useState([]);
   const [dashboardData, setDashboardData] = useState({
@@ -187,88 +188,170 @@ function Dashboard() {
 
       {/* Charts Section */}
       <div style={{ marginTop: "3rem" }}>
+  {/* First Row: Pie Chart and Bar Chart */}
+  <div
+    className="charts-grid"
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(500px, 1fr))",
+      gap: "2rem",
+      marginBottom: "3rem",
+    }}
+  >
+    {/* Number of Employees Per Site - Pie Chart */}
+    {dashboardData.employeesPerSite &&
+      dashboardData.employeesPerSite.length > 0 && (
         <div
-          className="charts-grid"
+          className="chart-card"
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(500px, 1fr))",
-            gap: "2rem",
-            marginBottom: "3rem",
+            background: "#fff",
+            padding: "1.5rem",
+            borderRadius: "10px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+            minHeight: "450px", // ✅ Fixed height
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          {/* Total Punches Today - Bar Chart */}
-          {dashboardData.punchesToday &&
-            dashboardData.punchesToday.length > 0 && (
-              <div className="chart-card">
-                <BarChart
-                  labels={dashboardData.punchesToday.map((item) => item.Site)}
-                  dataPoints={dashboardData.punchesToday.map(
-                    (item) => item.PunchCount
-                  )}
-                  title="Total Punches Today"
-                  backgroundColors={["rgba(75, 192, 192, 0.6)"]}
-                />
-              </div>
+          <PieChart
+            labels={dashboardData.employeesPerSite.map(
+              (item) => `${item.Site} (${item.EmployeeCount})`
             )}
-
-          {/* Number of Employees Per Site - Pie Chart */}
-          {dashboardData.employeesPerSite &&
-            dashboardData.employeesPerSite.length > 0 && (
-              <div className="chart-card">
-                <PieChart
-                  labels={dashboardData.employeesPerSite.map(
-                    (item) => `${item.Site} (${item.EmployeeCount})`
-                  )}
-                  dataPoints={dashboardData.employeesPerSite.map(
-                    (item) => item.EmployeeCount
-                  )}
-                  title="Number Of Employees Per Site"
-                />
-              </div>
+            dataPoints={dashboardData.employeesPerSite.map(
+              (item) => item.EmployeeCount
             )}
+            title="Number Of Employees Per Site"
+          />
         </div>
+      )}
 
-        {/* Bar and Line Charts Side by Side */}
-        <div
-          className="charts-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
-            gap: "2rem",
-            marginTop: "2rem",
-          }}
-        >
-          {/* Leaves vs Absent Days Bar Chart */}
-          <div className="chart-card">
-            <BarChart
-              labels={["Applied Leaves & Tours", "Absent Days"]}
-              dataPoints={[
-                dashboardData.statistics.totalLeaveDays +
-                  dashboardData.statistics.totalTourDays,
-                dashboardData.statistics.totalAbsentDays,
-              ]}
-              title="Leaves vs Absent Days"
-              backgroundColors={["#4caf50", "#f44336"]}
-            />
-          </div>
-
-          {/* Monthly Employee Counts Line Chart */}
-          {dashboardData.monthlyEmployeeCounts &&
-            dashboardData.monthlyEmployeeCounts.length > 0 && (
-              <div className="chart-card" style={{ marginTop: "8vh" }}>
-                <LineChart
-                  labels={dashboardData.monthlyEmployeeCounts.map(
-                    (item) => item.Month
-                  )}
-                  dataPoints={dashboardData.monthlyEmployeeCounts.map(
-                    (item) => item.EmployeeCount
-                  )}
-                  title="Monthly Active Employees"
-                />
-              </div>
-            )}
-        </div>
+    {/* Today's Check-ins by Site */}
+    <div
+      className="chart-box"
+      style={{
+        background: "#fff",
+        padding: "1.5rem",
+        borderRadius: "10px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+        minHeight: "450px", // ✅ Fixed height
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <h3
+        style={{
+          marginBottom: "1rem",
+          color: "#333",
+          fontSize: "1.3rem",
+        }}
+      >
+        Today's Check-ins by Site
+      </h3>
+      <div style={{ flex: 1 }}>
+        <BarChart
+          labels={
+            dashboardData.punchesToday?.map((item) => item.Site) || []
+          }
+          dataPoints={
+            dashboardData.punchesToday?.map((item) => item.PunchCount) || []
+          }
+          title="Real-time Attendance"
+          backgroundColors={[
+            "#2196F3",
+            "#4CAF50",
+            "#FF9800",
+            "#F44336",
+            "#9C27B0",
+          ]}
+        />
       </div>
+      {/* Total count below chart */}
+      <p
+        style={{
+          textAlign: "center",
+          marginTop: "1rem",
+          color: "#666",
+          fontSize: "0.95rem",
+          fontWeight: "500",
+        }}
+      >
+        Total Today:{" "}
+        <strong style={{ color: "#2196F3", fontSize: "1.1rem" }}>
+          {dashboardData.punchesToday?.reduce(
+            (sum, item) => sum + item.PunchCount,
+            0
+          ) || 0}
+        </strong>{" "}
+        punches
+      </p>
+    </div>
+  </div>
+
+  {/* Second Row: Bar Chart and Line Chart */}
+  <div
+    className="charts-grid"
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(500px, 1fr))",
+      gap: "2rem",
+      marginTop: "2rem",
+    }}
+  >
+    {/* Leaves vs Absent Days Bar Chart */}
+    <div
+      className="chart-card"
+      style={{
+        background: "#fff",
+        padding: "1.5rem",
+        borderRadius: "10px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+        minHeight: "450px", // ✅ Fixed height
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+      }}
+    >
+      <BarChart
+        labels={["Applied Leaves & Tours", "Absent Days"]}
+        dataPoints={[
+          dashboardData.statistics.totalLeaveDays +
+            dashboardData.statistics.totalTourDays,
+          dashboardData.statistics.totalAbsentDays,
+        ]}
+        title="Leaves vs Absent Days"
+        backgroundColors={["#4caf50", "#f44336"]}
+      />
+    </div>
+
+    {/* Monthly Employee Counts Line Chart */}
+    {dashboardData.monthlyEmployeeCounts &&
+      dashboardData.monthlyEmployeeCounts.length > 0 && (
+        <div
+          className="chart-card"
+          style={{
+            background: "#fff",
+            padding: "1.5rem",
+            borderRadius: "10px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+            minHeight: "450px", // ✅ Fixed height
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <LineChart
+            labels={dashboardData.monthlyEmployeeCounts.map(
+              (item) => item.Month
+            )}
+            dataPoints={dashboardData.monthlyEmployeeCounts.map(
+              (item) => item.EmployeeCount
+            )}
+            title="Monthly Active Employees"
+          />
+        </div>
+      )}
+  </div>
+</div>
+
     </div>
   );
 }

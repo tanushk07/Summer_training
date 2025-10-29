@@ -6,7 +6,7 @@ function LandingPage() {
   return (
     <section className="hero-section">
       <div className="hero-content">
-        <h1>EACS Attendance Monitoring</h1>
+        <h1>EACS Human Resource Monitoring System</h1>
         <p>Visualize attendance data in a seamless and elegant interface</p>
         <Link to="/login" className="cta-button">
           See Attendance Insights

@@ -13,7 +13,7 @@ export const API_ENDPOINTS = {
 
   // Employee Management
   EMP_MASTER: "/emp_master",
-
+  EMPLOYEE_DETAILS: "/employee_details",
   // Reports
   MONTHLY_REPORT: "/monthlyreport",
   LEAVE_INFO: "/leaveinfo",

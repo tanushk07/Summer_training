@@ -83,14 +83,21 @@ function Navbar({ user }) {
                   className="dropdown-link"
                   onClick={() => setDropdownOpen(false)}
                 >
-                  <i className="fa-solid fa-circle-info"></i> Applied Leaves
+                  <i className="fa-solid fa-person-walking-arrow-right"></i> Applied Leaves
                 </NavLink>
                 <NavLink 
                   to="/tourinfo" 
                   className="dropdown-link"
                   onClick={() => setDropdownOpen(false)}
                 >
-                  <i className="fa-solid fa-circle-info"></i> Applied Tour Leaves
+                  <i className="fa-solid fa-person-walking-arrow-right"></i> Applied Tour Leaves
+                </NavLink>
+                <NavLink 
+                  to="/employee_details" 
+                  className="dropdown-link"
+                  onClick={() => setDropdownOpen(false)}
+                >
+                  <i className="fa-solid fa-circle-info"></i> Employee Details
                 </NavLink>
               </div>
             </li>

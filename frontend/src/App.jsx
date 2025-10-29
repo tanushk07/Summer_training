@@ -13,7 +13,7 @@ import MonthlyReport from "./pages/MonthlyReport";
 import Punching from "./pages/Punching";
 import TourInfo from "./pages/TourInfo";
 import LandingPage from "./pages/LandingPage";
-
+import EmployeeDetails from "./pages/EmployeeDetails";
 // Create context for user authentication
 export const UserContext = createContext();
 
@@ -75,7 +75,6 @@ function App() {
   }
 
   return (
-    
     <UserContext.Provider value={{ user, login, logout }}>
       <Navbar user={user} />
       <main
@@ -98,6 +97,12 @@ function App() {
             path="/emp_master"
             element={user ? <EmpMaster /> : <Navigate to="/" />}
           />
+
+          <Route
+            path="/employee_details/:id?"
+            element={user ? <EmployeeDetails /> : <Navigate to="/login" />}
+          />
+
           <Route
             path="/leaveinfo"
             element={user ? <LeaveInfo /> : <Navigate to="/" />}
