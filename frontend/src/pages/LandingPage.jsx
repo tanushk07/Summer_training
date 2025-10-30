@@ -9,7 +9,7 @@ function LandingPage() {
         <h1>EACS Human Resource Monitoring System</h1>
         <p>Visualize attendance data in a seamless and elegant interface</p>
         <Link to="/login" className="cta-button">
-          See Attendance Insights
+          See Insights
         </Link>
       </div>
       <div className="hero-image">

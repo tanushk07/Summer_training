@@ -25,7 +25,7 @@ function TourInfo() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const rowsPerPage = 10;
+  const rowsPerPage = 30;
 
   // Fetch sites on component mount
   useEffect(() => {

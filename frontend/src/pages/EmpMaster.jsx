@@ -145,7 +145,7 @@ function EmpMaster() {
           onChange={handleSiteChange}
           className="site-dropdown"
         >
-          <option value="">Choose site</option>
+          <option value="All Sites">All Sites</option>
           {sites.map((site) => (
             <option key={site.site_id} value={site.site_name}>
               {site.site_name}

@@ -304,11 +304,12 @@ function MonthlyReport() {
               <table className="profile-table">
                 <thead>
                   <tr>
-                    <th>% Employees in Band</th>
-                    <th></th>
+                  <th>% of Days in Month</th>
+                  
+                    <th colSpan={2}>% Employees in Band</th>
                   </tr>
                   <tr className="sub-header">
-                    <th>% of Days in Month</th>
+                    <th></th>
                     <th>Beyond {filters.time1}</th>
                     <th>Beyond {filters.time2}</th>
                   </tr>
