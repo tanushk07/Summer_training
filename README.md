@@ -1,4 +1,4 @@
-# EACS Attendance Monitoring System
+# EACS HR Monitoring System
 
 A comprehensive attendance monitoring and management system built with React frontend and Node.js backend, featuring real-time data visualization and reporting capabilities.
 
